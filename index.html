@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>公司內部點餐工具</title>
   
-  <!-- 引入 Google Fonts: Inter -->
+  <!-- 引入 Google Fonts: Noto Serif TC (典雅襯線) 與 Inter (無襯線搭配) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Serif+TC:wght@400;600;700&display=swap" rel="stylesheet">
   
   <!-- 引入自訂 CSS -->
   <link rel="stylesheet" href="all.css">
@@ -22,9 +22,9 @@
   <!-- 頂部導覽列 -->
   <header class="header">
     <div class="container header-container">
-      <h1>🍔 內部點餐系統</h1>
+      <h1>內部點餐系統</h1>
       <div id="user-info" class="user-info hidden">
-        <span id="user-name-display"></span>
+        <span id="user-name-display" class="user-name"></span>
         <span id="user-role-badge" class="badge"></span>
       </div>
     </div>
@@ -32,49 +32,79 @@
 
   <!-- 登入區塊 -->
   <div id="login-container" class="container auth-container">
-    <h2>請先登入</h2>
-    <p>為了確認身分並讀取專屬資訊，請透過您的 Google 帳號進行登入授權。</p>
+    <h2>Welcome</h2>
+    <p class="text-muted">請透過企業 Google 帳號進行身分驗證，以進入點餐系統。</p>
     <!-- Google 登入按鈕將在 JS 中初始化時綁定 -->
-    <button id="auth-btn" class="btn btn-google">使用 Google 帳號登入授權</button>
+    <button id="auth-btn" class="btn btn-outline">Sign in with Google</button>
   </div>
 
   <!-- 應用程式主要區塊 (預設隱藏) -->
   <main id="app-container" class="container hidden">
+    
     <!-- 顯示訊息用的區域 -->
     <div id="alert-message" class="alert hidden"></div>
 
-    <!-- 管理員專區：設定今日餐廳 -->
-    <section id="admin-setup-section" class="card section admin-only hidden">
-      <h3>⚙️ [管理員] 設定今日餐廳</h3>
-      <p>請勾選今日開放點餐的餐廳：</p>
-      <div id="admin-restaurant-checkboxes" class="checkbox-group">
-        <!-- JS 產生的核取方塊 -->
-      </div>
-      <button id="save-today-config-btn" class="btn btn-primary mt-3">儲存設定</button>
-    </section>
+    <!-- 分頁導覽列 (Tabs) -->
+    <nav class="tabs-nav">
+      <button class="tab-btn active" data-target="tab-order">點餐區</button>
+      <button class="tab-btn" data-target="tab-confirm">確認訂單</button>
+      <button class="tab-btn admin-only hidden" id="admin-tab-btn" data-target="tab-admin">管理員專區</button>
+    </nav>
 
-    <!-- 點餐區塊 -->
-    <section id="order-section" class="section">
-      <h3>🍽️ 今日餐點列表 (<span id="today-restaurants-display">載入中...</span>)</h3>
+    <!-- [分頁 1] 點餐區 -->
+    <section id="tab-order" class="tab-pane active">
+      <div class="section-header">
+        <h3>今日菜單</h3>
+        <span class="subtitle">供應餐廳：<span id="today-restaurants-display">載入中...</span></span>
+      </div>
       <div id="menu-cards-container" class="menu-grid">
         <!-- JS 產生的餐點卡片 -->
       </div>
     </section>
 
-    <!-- 確認訂單與管理員的清空資料 -->
-    <section id="confirm-order-section" class="card section mt-4">
-      <h3>📋 今天的訂餐狀況</h3>
-      <div id="orders-list-container" class="orders-list mt-3">
-        <!-- 從 Orders 工作表抓取的今日資料列表 -->
+    <!-- [分頁 2] 確認訂單區 -->
+    <section id="tab-confirm" class="tab-pane">
+      <div class="section-header">
+        <h3>今日訂購紀錄</h3>
+        <span class="subtitle">所有成員的點餐明細</span>
       </div>
-      <div class="actions mt-3 flex-between">
-        <button id="copy-orders-btn" class="btn btn-secondary">一鍵複製今日訂單</button>
-        <button id="clear-orders-btn" class="btn btn-danger admin-only hidden">清空今日點餐 (管理員)</button>
+      <div class="card">
+        <div id="orders-list-container" class="orders-list">
+          <!-- 從 Orders 工作表抓取的今日資料列表 -->
+        </div>
+        <div class="actions mt-4 flex-end">
+          <button id="copy-orders-btn" class="btn btn-primary">一鍵複製清單</button>
+        </div>
       </div>
     </section>
+
+    <!-- [分頁 3] 管理員專區 (預設隱藏) -->
+    <section id="tab-admin" class="tab-pane admin-only hidden">
+      <div class="section-header">
+        <h3>管理員設定</h3>
+        <span class="subtitle">更新系統狀態與清除紀錄</span>
+      </div>
+      
+      <!-- 設定今日餐廳 -->
+      <div class="card mb-4">
+        <h4>設定今日開放餐廳</h4>
+        <p class="text-muted mb-3">請勾選今日開放點餐的餐廳（將顯示於「點餐區」供成員選擇）：</p>
+        <div id="admin-restaurant-checkboxes" class="checkbox-group mb-3">
+          <!-- JS 產生的核取方塊 -->
+        </div>
+        <button id="save-today-config-btn" class="btn btn-primary">儲存餐廳設定</button>
+      </div>
+
+      <!-- 清空今日點餐 -->
+      <div class="card border-danger">
+        <h4 class="text-danger">危險操作</h4>
+        <p class="text-muted mb-3">清空今天所有的點餐紀錄，將刪除資料表中除標題列外的所有內容。此操作無法復原。</p>
+        <button id="clear-orders-btn" class="btn btn-danger">清空今日全部訂單</button>
+      </div>
+    </section>
+
   </main>
 
-  <!-- 引入自訂 JS (我們使用 module，或是確保在 DOM 載入後執行) -->
   <script src="all.js"></script>
 </body>
 </html>
