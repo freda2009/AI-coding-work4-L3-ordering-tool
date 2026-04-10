@@ -5,9 +5,9 @@
  * 請開發者填寫以下參數以執行程式：
  * ==================================================
  */
-const API_KEY = '請填寫_您的_API_KEY';
-const CLIENT_ID = '請填寫_您的_OAUTH_CLIENT_ID';
-const SPREADSHEET_ID = '請填寫_您的_SPREADSHEET_ID';
+const API_KEY = 'AIzaSyB8qMe5kVJa1QUzwJc9X2FSt7VV8K2tsvQ';
+const CLIENT_ID = '208816868977-ah6v522m25kilkj7crlvsbo8jl8hv065.apps.googleusercontent.com';
+const SPREADSHEET_ID = '1thIeMZqfY2gvoCbKw3JnRzmTQ6Mdz4bfehEapK2_aaI';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email';
 
 /**
@@ -69,7 +69,7 @@ window.onload = function () {
   dom.authBtn.addEventListener('click', () => {
     tokenClient.requestAccessToken();
   });
-  
+
   // 綁定管理員 / 功能按鈕
   dom.saveTodayConfigBtn.addEventListener('click', handleSaveTodayConfig);
   dom.copyOrdersBtn.addEventListener('click', handleCopyOrders);
@@ -92,7 +92,7 @@ async function handleLoginSuccess() {
     // 2. 取得 Users 工作表比對身分
     await fetchAllData();
     checkUserPermission();
-    
+
   } catch (error) {
     console.error('Login error:', error);
     showAlert('登入或讀取資料發生錯誤', 'error');
@@ -115,7 +115,7 @@ async function fetchSheetData(range) {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   const data = await res.json();
   // 回傳陣列（如果為空則回傳 []），省略標題列
-  return data.values ? data.values.slice(1) : []; 
+  return data.values ? data.values.slice(1) : [];
 }
 
 // 取得所有必要資料
@@ -261,13 +261,13 @@ function renderTodayMenu() {
 }
 
 // 送出訂單 (Append 寫入 Orders 工作表)
-window.handleOrder = async function(restName, itemName, itemPrice, remarkInputId) {
+window.handleOrder = async function (restName, itemName, itemPrice, remarkInputId) {
   const remarkStr = document.getElementById(remarkInputId).value || '無';
-  
+
   // 取得台北時間的簡單格式 (YYYY/MM/DD HH:mm)
   const now = new Date();
-  const timeStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  
+  const timeStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
   // 準備追加的資料 (Orders 欄位: 點餐時間, 訂購人 Email, 餐廳名稱, 餐點內容, 金額, 備註)
   const newOrder = [timeStr, userEmail, restName, itemName, itemPrice, remarkStr];
 
@@ -285,7 +285,7 @@ window.handleOrder = async function(restName, itemName, itemPrice, remarkInputId
     // 提示成功，清空備註框，重新整理訂單列表
     document.getElementById(remarkInputId).value = '';
     showAlert(`已成功點餐：${restName} - ${itemName}`, 'success');
-    
+
     // 重新抓取並列出
     await fetchAllData();
     renderOrdersList();
@@ -329,7 +329,7 @@ function handleCopyOrders() {
     showAlert('目前沒有訂單可複製', 'error');
     return;
   }
-  
+
   let text = '🚀 今日點餐統計：\n';
   sheetOrders.forEach(order => {
     const emailPrefix = (order[1] || '').split('@')[0];
