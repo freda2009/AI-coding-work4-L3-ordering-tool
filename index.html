@@ -53,7 +53,16 @@
 
     <!-- [分頁 1] 點餐區 -->
     <section id="tab-order" class="tab-pane active">
-      <div class="section-header">
+      
+      <!-- 個人的當日訂單區塊 -->
+      <div class="card mb-4 hidden" id="my-orders-card">
+        <h4>🔖 我的訂單</h4>
+        <div id="my-orders-container" class="orders-list" style="margin-top: 10px;">
+          <!-- JS 產生的個人訂單 -->
+        </div>
+      </div>
+
+      <div class="section-header mt-4">
         <div class="flex-between">
           <h3>今日菜單</h3>
           <div id="order-time-status" class="badge bg-gray">時間讀取中...</div>
@@ -94,9 +103,9 @@
         <p class="text-muted mb-3">請勾選今日開放點餐的餐廳，並設定本次訂餐的開放時間：</p>
         
         <div class="time-settings-group mb-3">
-          <label>開始時間：<input type="time" id="config-start-time" class="input-modern"></label>
+          <label>開始時間：<input type="datetime-local" id="config-start-time" class="input-modern"></label>
           <span style="margin: 0 10px;">~</span>
-          <label>結束時間：<input type="time" id="config-end-time" class="input-modern"></label>
+          <label>結束時間：<input type="datetime-local" id="config-end-time" class="input-modern"></label>
         </div>
 
         <div id="admin-restaurant-checkboxes" class="checkbox-group mb-3">

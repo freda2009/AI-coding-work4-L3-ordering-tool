@@ -60,6 +60,10 @@ const dom = {
   orderTimeStatus: document.getElementById('order-time-status'),
   todayRestaurantsDisplay: document.getElementById('today-restaurants-display'),
   menuCardsContainer: document.getElementById('menu-cards-container'),
+  
+  // 個人訂單區
+  myOrdersCard: document.getElementById('my-orders-card'),
+  myOrdersContainer: document.getElementById('my-orders-container'),
 
   // 訂單區
   ordersListContainer: document.getElementById('orders-list-container'),
@@ -180,6 +184,7 @@ function checkUserPermission() {
   // 強制先跳換到點餐區
   switchTab('tab-order');
   renderTodayMenu();
+  renderMyOrders();
   renderOrdersList();
 }
 
@@ -404,14 +409,26 @@ function isOrderTimeValid() {
   if (!orderStartTime || !orderEndTime) return true; // 若無設定則開放
   
   const now = new Date();
-  const nowH = String(now.getHours()).padStart(2, '0');
-  const nowM = String(now.getMinutes()).padStart(2, '0');
-  const nowStr = `${nowH}:${nowM}`;
+  const start = new Date(orderStartTime);
+  const end = new Date(orderEndTime);
   
-  if (nowStr >= orderStartTime && nowStr <= orderEndTime) {
+  // 避免舊格式解析失敗
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    return true;
+  }
+  
+  if (now >= start && now <= end) {
     return true;
   }
   return false;
+}
+
+// 格式化日期時間顯示
+function formatDateTimeStr(dtStr) {
+  if(!dtStr) return '';
+  const d = new Date(dtStr);
+  if(isNaN(d.getTime())) return dtStr;
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function renderTodayMenu() {
@@ -422,7 +439,9 @@ function renderTodayMenu() {
   } else {
     // 有設定時間
     const timeValid = isOrderTimeValid();
-    dom.orderTimeStatus.textContent = timeValid ? `開放點餐 (${orderStartTime}~${orderEndTime})` : `已過點餐時間 (${orderStartTime}~${orderEndTime})`;
+    const formattedStart = formatDateTimeStr(orderStartTime);
+    const formattedEnd = formatDateTimeStr(orderEndTime);
+    dom.orderTimeStatus.textContent = timeValid ? `開放點餐 (${formattedStart} ~ ${formattedEnd})` : `已過點餐或未開放 (${formattedStart} ~ ${formattedEnd})`;
     dom.orderTimeStatus.className = timeValid ? 'badge bg-success' : 'badge bg-danger';
   }
 
@@ -492,11 +511,88 @@ window.handleOrder = async function (restName, itemName, itemPrice, remarkInputI
     showAlert(`已新增您的訂單：${itemName}`, 'success');
 
     await fetchAllData();
+    renderMyOrders();
     renderOrdersList();
 
   } catch (err) {
     console.error(err);
     showAlert('點餐失敗，請重試。', 'error');
+  }
+}
+
+// 渲染個人的當日訂單
+function renderMyOrders() {
+  dom.myOrdersContainer.innerHTML = '';
+  
+  let userOrders = [];
+  sheetOrders.forEach((order, index) => {
+    // 忽略空列並比對 email
+    if (order && order[0] && order[1] === userEmail) {
+      userOrders.push({ order, rowIndex: index });
+    }
+  });
+
+  if (userOrders.length === 0) {
+    dom.myOrdersCard.classList.add('hidden');
+    return;
+  }
+  
+  dom.myOrdersCard.classList.remove('hidden');
+  const isValidTime = isOrderTimeValid();
+
+  userOrders.forEach(item => {
+    const { order, rowIndex } = item;
+    const timeStr = (order[0] || '').split(' ')[1] || order[0];
+    
+    const div = document.createElement('div');
+    div.className = 'order-item';
+    div.style.display = 'flex';
+    div.style.justifyContent = 'space-between';
+    div.style.alignItems = 'center';
+    
+    div.innerHTML = `
+      <div>
+        <div class="order-detail" style="font-weight: 500; font-size: 1rem;">${order[2]} - ${order[3]} (NT$ ${order[4]})</div>
+        <div class="order-remark">備註: ${order[5] || '無'} ｜ <small>${timeStr}</small></div>
+      </div>
+      <div>
+        <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.8rem;" 
+          ${isValidTime ? '' : 'disabled'}
+          onclick="handleCancelOrder(${rowIndex})">取消</button>
+      </div>
+    `;
+    dom.myOrdersContainer.appendChild(div);
+  });
+}
+
+window.handleCancelOrder = async function(rowIndex) {
+  if (!isOrderTimeValid()) {
+    showAlert('目前不在開放時間範圍內，無法取消！', 'error');
+    return;
+  }
+  
+  if (!confirm('確定要取消這筆訂單嗎？取消後需重新點餐。')) {
+    return;
+  }
+  
+  try {
+    // 實際列數 = 索引值 + 2 (因為首列是標題，第二列開始才是資料 array index 0)
+    const sheetRow = rowIndex + 2;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Orders!A${sheetRow}:F${sheetRow}:clear`;
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      }
+    });
+    
+    showAlert('已取消訂單。', 'success');
+    await fetchAllData();
+    renderMyOrders();
+    renderOrdersList();
+  } catch (err) {
+    console.error(err);
+    showAlert('取消失敗，可能是網路問題，請重試。', 'error');
   }
 }
 
@@ -507,12 +603,16 @@ window.handleOrder = async function (restName, itemName, itemPrice, remarkInputI
  */
 function renderOrdersList() {
   dom.ordersListContainer.innerHTML = '';
-  if (sheetOrders.length === 0) {
+  
+  // 過濾有效的資料 (忽略已被刪除的空列)
+  const validOrders = sheetOrders.filter(order => order && order[0] && order[1]);
+
+  if (validOrders.length === 0) {
     dom.ordersListContainer.innerHTML = '<div style="padding:10px; color:var(--color-gray);">目前尚無點餐紀錄。</div>';
     return;
   }
 
-  sheetOrders.forEach(order => {
+  validOrders.forEach(order => {
     const emailPrefix = (order[1] || '').split('@')[0];
     const html = `
       <div class="order-item">
@@ -526,13 +626,15 @@ function renderOrdersList() {
 }
 
 function handleCopyOrders() {
-  if (sheetOrders.length === 0) {
+  const validOrders = sheetOrders.filter(order => order && order[0] && order[1]);
+
+  if (validOrders.length === 0) {
     showAlert('無資料可複製', 'error');
     return;
   }
 
   let text = '🔖 今日點餐紀錄：\n';
-  sheetOrders.forEach(order => {
+  validOrders.forEach(order => {
     const emailPrefix = (order[1] || '').split('@')[0];
     text += `${emailPrefix}｜${order[2]} ${order[3]} ($${order[4]}) [${order[5] || '無'}]\n`;
   });
