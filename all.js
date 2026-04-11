@@ -49,18 +49,20 @@ const dom = {
   configStartTime: document.getElementById('config-start-time'),
   configEndTime: document.getElementById('config-end-time'),
   saveTodayConfigBtn: document.getElementById('save-today-config-btn'),
+  resetTodayConfigBtn: document.getElementById('reset-today-config-btn'),
   clearOrdersBtn: document.getElementById('clear-orders-btn'),
-  
+
   // 菜單管理
   adminMenuList: document.getElementById('admin-menu-list'),
   addMenuItemBtn: document.getElementById('add-menu-item-btn'),
   saveMenuBtn: document.getElementById('save-menu-btn'),
+  categoryList: document.getElementById('category-list'),
 
   // 點餐區
   orderTimeStatus: document.getElementById('order-time-status'),
   todayRestaurantsDisplay: document.getElementById('today-restaurants-display'),
   menuCardsContainer: document.getElementById('menu-cards-container'),
-  
+
   // 個人訂單區
   myOrdersCard: document.getElementById('my-orders-card'),
   myOrdersContainer: document.getElementById('my-orders-container'),
@@ -94,9 +96,10 @@ window.onload = function () {
   });
 
   dom.saveTodayConfigBtn.addEventListener('click', handleSaveTodayConfig);
+  dom.resetTodayConfigBtn.addEventListener('click', handleResetTodayConfig);
   dom.copyOrdersBtn.addEventListener('click', handleCopyOrders);
   dom.clearOrdersBtn.addEventListener('click', handleClearOrders);
-  
+
   dom.addMenuItemBtn.addEventListener('click', handleAddMenuItem);
   dom.saveMenuBtn.addEventListener('click', handleSaveMenu);
 
@@ -143,17 +146,17 @@ async function fetchAllData() {
   sheetUsers = await fetchSheetData('Users!A:C');
   sheetMenu = await fetchSheetData('Menu!A:D');
   sheetOrders = await fetchSheetData('Orders!A:F');
-  
+
   // 處理 TodayConfig (A欄:餐廳, B欄:空, C欄:開始時間, D欄:結束時間)
   const rawToday = await fetchSheetData('TodayConfig!A:D');
   sheetTodayConfig = rawToday.map(row => row[0]).filter(Boolean);
-  
+
   if (rawToday.length > 0) {
     orderStartTime = rawToday[0][2] || '';
-    orderEndTime   = rawToday[0][3] || '';
+    orderEndTime = rawToday[0][3] || '';
   } else {
     orderStartTime = '';
-    orderEndTime   = '';
+    orderEndTime = '';
   }
 }
 
@@ -198,7 +201,7 @@ function initTabs() {
     btn.addEventListener('click', (e) => {
       const targetId = e.target.getAttribute('data-target');
       switchTab(targetId);
-      
+
       // 當切換到點餐區時，重新確保時間有效性並更新卡片按鈕
       if (targetId === 'tab-order') {
         renderTodayMenu();
@@ -224,12 +227,19 @@ function switchTab(targetId) {
  * 6. 管理員專區邏輯 (TodayConfig & Menu CRUD)
  * ==================================================
  */
+function toDatetimeLocal(dtStr) {
+  if (!dtStr) return '';
+  const d = new Date(dtStr);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 function renderAdminCheckboxes() {
   const restaurants = [...new Set(sheetMenu.map(item => item[0]))];
   dom.adminCheckboxes.innerHTML = '';
-  
-  dom.configStartTime.value = orderStartTime;
-  dom.configEndTime.value = orderEndTime;
+
+  dom.configStartTime.value = toDatetimeLocal(orderStartTime);
+  dom.configEndTime.value = toDatetimeLocal(orderEndTime);
 
   restaurants.forEach(rest => {
     const isChecked = sheetTodayConfig.includes(rest) ? 'checked' : '';
@@ -249,19 +259,19 @@ async function handleSaveTodayConfig() {
 
   const checkboxes = dom.adminCheckboxes.querySelectorAll('input[type="checkbox"]:checked');
   const selected = Array.from(checkboxes).map(cb => cb.value);
-  
+
   const startT = dom.configStartTime.value || '';
   const endT = dom.configEndTime.value || '';
-  
+
   // 建立標題列
   let bodyValues = [['今日開放餐廳', '', '開始時間', '結束時間']];
-  
+
   // 第一列資料加上時間設定
   if (selected.length > 0) {
     bodyValues.push([selected[0], '', startT, endT]);
     // 剩下的資料
-    for(let i = 1; i < selected.length; i++) {
-       bodyValues.push([selected[i]]);
+    for (let i = 1; i < selected.length; i++) {
+      bodyValues.push([selected[i]]);
     }
   } else {
     bodyValues.push(['', '', startT, endT]);
@@ -299,16 +309,70 @@ async function handleSaveTodayConfig() {
   }
 }
 
+async function handleResetTodayConfig() {
+  const isTimeStillValid = isOrderTimeValid();
+  if (isTimeStillValid && (orderStartTime || orderEndTime)) {
+    if (!confirm('前次的開放設定時間還未到期，確定要強制重設並清空所有點餐紀錄嗎？')) {
+      return;
+    }
+  } else {
+    if (!confirm('點擊後將清空本次點餐的餐廳設定與所有相關的點單，您確認要重設嗎？')) {
+      return;
+    }
+  }
+
+  dom.resetTodayConfigBtn.disabled = true;
+  dom.resetTodayConfigBtn.textContent = '重設中...';
+
+  try {
+    // 1. 清除 TodayConfig
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/TodayConfig!A:D:clear`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+
+    // 2. 清除 Orders
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/Orders!A2:F:clear`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+
+    await fetchAllData();
+    renderAdminCheckboxes();
+    renderTodayMenu();
+    renderMyOrders();
+    renderOrdersList();
+
+    showAlert('已成功重設開放設定與訂單紀錄', 'success');
+  } catch (err) {
+    console.error(err);
+    showAlert('重設失敗，請檢查權限或網路。', 'error');
+  } finally {
+    dom.resetTodayConfigBtn.disabled = false;
+    dom.resetTodayConfigBtn.textContent = '重設開放設定';
+  }
+}
+
 // 渲染目前所有的菜單資料到後台表格
 function renderAdminMenuList() {
   dom.adminMenuList.innerHTML = '';
+  dom.categoryList.innerHTML = '';
+
+  // 建立不重複的分類清單
+  const categories = [...new Set(sheetMenu.map(item => item[3]).filter(Boolean))];
+  categories.forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    dom.categoryList.appendChild(opt);
+  });
+
   sheetMenu.forEach((item, index) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" value="${item[0] || ''}"></td>
       <td><input type="text" value="${item[1] || ''}"></td>
       <td><input type="text" value="${item[2] || ''}"></td>
-      <td><input type="text" value="${item[3] || ''}"></td>
+      <td><input type="text" list="category-list" value="${item[3] || ''}"></td>
       <td><button class="btn btn-danger" style="padding: 4px 10px; font-size:0.8rem;" onclick="handleRemoveMenuItem(this)">刪除</button></td>
     `;
     dom.adminMenuList.appendChild(tr);
@@ -322,14 +386,14 @@ function handleAddMenuItem() {
     <td><input type="text" placeholder="餐廳名稱"></td>
     <td><input type="text" placeholder="品名"></td>
     <td><input type="text" placeholder="單價"></td>
-    <td><input type="text" placeholder="分類"></td>
+    <td><input type="text" list="category-list" placeholder="分類"></td>
     <td><button class="btn btn-danger" style="padding: 4px 10px; font-size:0.8rem;" onclick="handleRemoveMenuItem(this)">刪除</button></td>
   `;
   dom.adminMenuList.prepend(tr);
 }
 
 // 移除當前按下的這列（僅畫面）
-window.handleRemoveMenuItem = function(btn) {
+window.handleRemoveMenuItem = function (btn) {
   const tr = btn.closest('tr');
   if (tr) {
     tr.remove();
@@ -407,16 +471,16 @@ async function handleClearOrders() {
 // 檢查目前是否可以點餐
 function isOrderTimeValid() {
   if (!orderStartTime || !orderEndTime) return true; // 若無設定則開放
-  
+
   const now = new Date();
   const start = new Date(orderStartTime);
   const end = new Date(orderEndTime);
-  
+
   // 避免舊格式解析失敗
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     return true;
   }
-  
+
   if (now >= start && now <= end) {
     return true;
   }
@@ -425,9 +489,9 @@ function isOrderTimeValid() {
 
 // 格式化日期時間顯示
 function formatDateTimeStr(dtStr) {
-  if(!dtStr) return '';
+  if (!dtStr) return '';
   const d = new Date(dtStr);
-  if(isNaN(d.getTime())) return dtStr;
+  if (isNaN(d.getTime())) return dtStr;
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
@@ -446,7 +510,7 @@ function renderTodayMenu() {
   }
 
   dom.todayRestaurantsDisplay.textContent = sheetTodayConfig.length > 0 ? sheetTodayConfig.join('、') : '目前尚未設定';
-  
+
   const todayMenuItems = sheetMenu.filter(item => sheetTodayConfig.includes(item[0]));
   dom.menuCardsContainer.innerHTML = '';
 
@@ -464,7 +528,7 @@ function renderTodayMenu() {
     const restName = item[0];
     const itemName = item[1];
     const itemPrice = item[2];
-    
+
     // 單色優雅風卡片設計
     const card = document.createElement('div');
     card.className = 'menu-card';
@@ -523,12 +587,17 @@ window.handleOrder = async function (restName, itemName, itemPrice, remarkInputI
 // 渲染個人的當日訂單
 function renderMyOrders() {
   dom.myOrdersContainer.innerHTML = '';
-  
+
   let userOrders = [];
+  let totalPrice = 0;
+
   sheetOrders.forEach((order, index) => {
     // 忽略空列並比對 email
     if (order && order[0] && order[1] === userEmail) {
       userOrders.push({ order, rowIndex: index });
+      const priceStr = order[4] ? String(order[4]) : '0';
+      const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
+      totalPrice += price;
     }
   });
 
@@ -536,20 +605,20 @@ function renderMyOrders() {
     dom.myOrdersCard.classList.add('hidden');
     return;
   }
-  
+
   dom.myOrdersCard.classList.remove('hidden');
   const isValidTime = isOrderTimeValid();
 
   userOrders.forEach(item => {
     const { order, rowIndex } = item;
     const timeStr = (order[0] || '').split(' ')[1] || order[0];
-    
+
     const div = document.createElement('div');
     div.className = 'order-item';
     div.style.display = 'flex';
     div.style.justifyContent = 'space-between';
     div.style.alignItems = 'center';
-    
+
     div.innerHTML = `
       <div>
         <div class="order-detail" style="font-weight: 500; font-size: 1rem;">${order[2]} - ${order[3]} (NT$ ${order[4]})</div>
@@ -563,18 +632,27 @@ function renderMyOrders() {
     `;
     dom.myOrdersContainer.appendChild(div);
   });
+
+  // 顯示加總金額
+  const totalDiv = document.createElement('div');
+  totalDiv.style.textAlign = 'right';
+  totalDiv.style.marginTop = '15px';
+  totalDiv.style.paddingTop = '10px';
+  totalDiv.style.borderTop = '1px solid var(--color-light)';
+  totalDiv.innerHTML = `<strong style="font-size: 1.1rem; color: var(--color-black);">總金額：NT$ ${totalPrice}</strong>`;
+  dom.myOrdersContainer.appendChild(totalDiv);
 }
 
-window.handleCancelOrder = async function(rowIndex) {
+window.handleCancelOrder = async function (rowIndex) {
   if (!isOrderTimeValid()) {
     showAlert('目前不在開放時間範圍內，無法取消！', 'error');
     return;
   }
-  
+
   if (!confirm('確定要取消這筆訂單嗎？取消後需重新點餐。')) {
     return;
   }
-  
+
   try {
     // 實際列數 = 索引值 + 2 (因為首列是標題，第二列開始才是資料 array index 0)
     const sheetRow = rowIndex + 2;
@@ -585,7 +663,7 @@ window.handleCancelOrder = async function(rowIndex) {
         'Authorization': `Bearer ${accessToken}`,
       }
     });
-    
+
     showAlert('已取消訂單。', 'success');
     await fetchAllData();
     renderMyOrders();
@@ -603,7 +681,7 @@ window.handleCancelOrder = async function(rowIndex) {
  */
 function renderOrdersList() {
   dom.ordersListContainer.innerHTML = '';
-  
+
   // 過濾有效的資料 (忽略已被刪除的空列)
   const validOrders = sheetOrders.filter(order => order && order[0] && order[1]);
 
