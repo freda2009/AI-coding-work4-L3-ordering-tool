@@ -1,11 +1,10 @@
 /**
  * ==================================================
  * 1. 環境變數設定
- * 以下常數為專案所需變數，本專案僅在前端執行，無後端與 secret key。
+ * 本專案僅使用 OAuth 2.0 進行身分驗證，不使用 API Key。
  * 請開發者填寫以下參數以執行程式：
  * ==================================================
  */
-const API_KEY = 'AIzaSyB8qMe5kVJa1QUzwJc9X2FSt7VV8K2tsvQ';
 const CLIENT_ID = '208816868977-ah6v522m25kilkj7crlvsbo8jl8hv065.apps.googleusercontent.com';
 const SPREADSHEET_ID = '1thIeMZqfY2gvoCbKw3JnRzmTQ6Mdz4bfehEapK2_aaI';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email';
@@ -136,7 +135,8 @@ async function handleLoginSuccess() {
  * ==================================================
  */
 async function fetchSheetData(range) {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${API_KEY}`;
+  // 僅使用 OAuth 2.0 Bearer Token，不附加 API Key
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   const data = await res.json();
   return data.values ? data.values.slice(1) : [];
